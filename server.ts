@@ -336,16 +336,17 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
 
   // vuln-code-snippet start resetPasswordMortyChallenge
   /* Rate limiting */
-  app.enable('trust proxy')
+  // Deliberately NOT app.enable('trust proxy'): this app is reached
+  // directly, with no reverse proxy in front of it, and trusting it
+  // unconditionally means Express takes req.ip straight from the
+  // client-supplied X-Forwarded-For header — exactly as spoofable per
+  // request as reading the header by hand was. With trust proxy left at
+  // its default (false), req.ip is the real socket address and cannot be
+  // rotated by the client, which is what every IP-keyed rate limiter in
+  // this file (here and on /api/Feedbacks) actually depends on to work.
   app.use('/rest/user/reset-password', rateLimit({
     windowMs: 5 * 60 * 1000,
     max: 100
-    // No custom keyGenerator: express-rate-limit's default keys on req.ip, which
-    // (with trust proxy enabled above) is the connection's real address resolved
-    // from the proxy chain. A client-supplied X-Forwarded-For header must never
-    // be trusted directly as the rate-limit key — it lets an attacker rotate the
-    // header value per request to bypass the limit and brute-force the security
-    // question entirely.
   }))
   // vuln-code-snippet end resetPasswordMortyChallenge
 
