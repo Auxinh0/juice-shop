@@ -277,7 +277,13 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
 
   /* /support/logs is no longer served over HTTP at all — logs can contain
      sensitive operational data and must never be browsable or downloadable
-     by name, even one file at a time. */
+     by name, even one file at a time. An explicit 404 here (rather than
+     just removing the route) stops these paths from falling through to the
+     Angular SPA catch-all, which would answer 200 with index.html and make
+     it look like the log endpoint still exists. */
+  app.use('/support/logs', (req: Request, res: Response) => {
+    res.status(404).json({ error: 'Not found' })
+  })
 
   /* Swagger documentation for B2B v2 endpoints */
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument))

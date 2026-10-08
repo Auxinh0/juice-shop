@@ -257,8 +257,12 @@ const routes: Routes = [
     component: OAuthComponent
   },
   {
+    // De-obfuscated readable path (the obscured matcher it replaced was the
+    // "security through obscurity" vuln) AND a real access-control guard, so
+    // the page is gated by authorization rather than by a hard-to-guess URL.
     path: 'tokensale-ico-ea',
-    component: TokenSaleComponent
+    component: TokenSaleComponent,
+    canActivate: [LoginGuard]
   },
   {
     path: 'coding-challenge/:challengeKey',
