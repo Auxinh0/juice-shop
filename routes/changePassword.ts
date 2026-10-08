@@ -42,7 +42,11 @@ export function changePassword () {
       return
     }
 
-    if (currentPassword && security.hash(currentPassword) !== loggedInUser.data.password) {
+    // The current password must ALWAYS be supplied and correct. The
+    // original `currentPassword && ...` skipped the check entirely when no
+    // current password was sent, letting anyone with a session change the
+    // password without knowing the existing one.
+    if (!currentPassword || security.hash(currentPassword) !== loggedInUser.data.password) {
       res.status(401).send(res.__('Current password is not correct.'))
       return
     }
