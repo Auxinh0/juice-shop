@@ -91,6 +91,7 @@ import { getLanguageList } from './routes/languages'
 import { getUserProfile } from './routes/userProfile'
 import { serveAngularClient } from './routes/angular'
 import { resetPassword } from './routes/resetPassword'
+import { serveLogFiles } from './routes/logfileServer'
 import { servePublicFiles } from './routes/fileServer'
 import { addMemory, getMemories } from './routes/memory'
 import { changePassword } from './routes/changePassword'
@@ -275,15 +276,14 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
   app.use('/encryptionkeys', serveIndexMiddleware, serveIndex('encryptionkeys', { icons: true, view: 'details' }))
   app.use('/encryptionkeys/:file', serveKeyFiles())
 
-  /* /support/logs is no longer served over HTTP at all — logs can contain
-     sensitive operational data and must never be browsable or downloadable
-     by name, even one file at a time. An explicit 404 here (rather than
-     just removing the route) stops these paths from falling through to the
-     Angular SPA catch-all, which would answer 200 with index.html and make
-     it look like the log endpoint still exists. */
-  app.use('/support/logs', (req: Request, res: Response) => {
-    res.status(404).json({ error: 'Not found' })
-  })
+  /* /support/logs: access logs are for administrators only. Gate the whole
+     path behind an admin check first, then keep the existing log browsing /
+     download handlers (and the challenge-detection middleware) intact —
+     a non-admin is rejected before ever reaching them. */
+  app.use('/support/logs', security.isAdmin())
+  app.use('/support/logs', serveIndexMiddleware, serveIndex('logs', { icons: true, view: 'details' }))
+  app.use('/support/logs', verify.accessControlChallenges())
+  app.use('/support/logs/:file', serveLogFiles())
 
   /* Swagger documentation for B2B v2 endpoints */
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument))
@@ -370,8 +370,10 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
   /* Deleting other customers' feedback is an admin-panel action only — any
      authenticated user could otherwise delete anyone's feedback */
   app.delete('/api/Feedbacks/:id', security.isAdmin())
-  /* Users: Only POST is allowed in order to register a new user */
-  app.get('/api/Users', security.isAuthorized())
+  /* Users: Only POST is allowed in order to register a new user. Listing
+     every user's record is an administrator action, not something any
+     logged-in customer should be able to do. */
+  app.get('/api/Users', security.isAdmin())
   app.route('/api/Users/:id')
     .get(security.isAuthorized())
     .put(security.denyAll())
