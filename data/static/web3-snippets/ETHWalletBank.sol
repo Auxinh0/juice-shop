@@ -9,12 +9,10 @@ contract ETHWalletBank {
   mapping(address => uint) public balances;
   mapping(address => uint) public userWithdrawing;
 
-  bool private locked;
-
   event ContractExploited(address indexed culprit);
 
-  // Reentrancy guard: a withdrawal cannot be re-entered from the
-  // recipient's fallback/receive before it finishes.
+  bool private locked;
+
   modifier nonReentrant() {
     require(!locked, "Reentrant call");
     locked = true;
@@ -40,11 +38,9 @@ contract ETHWalletBank {
       userWithdrawing[msg.sender] = 0;
       return;
     }
-    // Checks-effects-interactions: debit the balance BEFORE making the
-    // external call, so a re-entrant call sees the already-reduced balance.
-    balances[msg.sender] -= _amount; // vuln-code-snippet neutral-line web3WalletChallenge
-    (bool result, ) = msg.sender.call{ value: _amount }(""); // vuln-code-snippet neutral-line web3WalletChallenge
-    require(result, "Withdrawal call failed"); // vuln-code-snippet neutral-line web3WalletChallenge
+    balances[msg.sender] = balances[msg.sender].sub(_amount); // effects before interaction
+    (bool result, ) = msg.sender.call{ value: _amount }("");
+    require(result, "Withdrawal call failed");
     if(userWithdrawing[msg.sender] == 2) // vuln-code-snippet hide-line
     { // vuln-code-snippet hide-line
       emit ContractExploited(tx.origin); // vuln-code-snippet hide-line
