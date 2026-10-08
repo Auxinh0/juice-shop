@@ -65,10 +65,18 @@ export function profileImageUrlUpload () {
       if (url.match(/(.)*solve\/challenges\/server-side(.)*/) !== null) req.app.locals.abused_ssrf_bug = true
       const loggedInUser = security.authenticatedUsers.get(req.cookies.token)
       if (loggedInUser) {
+        // Reject an unsafe target outright — it must never reach the
+        // catch-all fallback below, which (for ordinary fetch failures)
+        // falls back to storing the raw URL as the profile image. That
+        // fallback existing at all is fine for a genuinely external image
+        // host that just can't be proxied; it must not become a backdoor
+        // around the SSRF check for a URL we already know points
+        // somewhere it shouldn't.
+        if (!(await isSafeImageUrl(url))) {
+          next(new Error('Invalid image URL'))
+          return
+        }
         try {
-          if (!(await isSafeImageUrl(url))) {
-            throw new Error('URL resolves to a private, internal, or unsupported address')
-          }
           const response = await fetch(url)
           if (!response.ok || !response.body) {
             throw new Error('url returned a non-OK status code or an empty body')
