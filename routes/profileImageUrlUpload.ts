@@ -4,6 +4,8 @@
  */
 
 import fs from 'node:fs'
+import dns from 'node:dns/promises'
+import net from 'node:net'
 import { Readable } from 'node:stream'
 import { finished } from 'node:stream/promises'
 import { type Request, type Response, type NextFunction } from 'express'
@@ -13,6 +15,49 @@ import { UserModel } from '../models/user'
 import * as utils from '../lib/utils'
 import logger from '../lib/logger'
 
+// SSRF guard: a "set my profile image from a URL" feature that fetches
+// whatever host the client names is a textbook request forgery vector —
+// it can reach internal services, cloud metadata endpoints, or the app's
+// own internal/admin routes, none of which the client could reach
+// directly. Resolve the hostname and refuse anything that isn't a public
+// address, before ever issuing the fetch.
+function isPrivateOrReservedIp (ip: string): boolean {
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number)
+    return (
+      a === 10 ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      a === 0
+    )
+  }
+  const lower = ip.toLowerCase()
+  return lower === '::1' || lower.startsWith('fe80:') || lower.startsWith('fc') || lower.startsWith('fd')
+}
+
+async function isSafeImageUrl (url: string): Promise<boolean> {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return false
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return false
+  }
+  if (net.isIP(parsed.hostname) && isPrivateOrReservedIp(parsed.hostname)) {
+    return false
+  }
+  try {
+    const records = await dns.lookup(parsed.hostname, { all: true })
+    return records.every(({ address }) => !isPrivateOrReservedIp(address))
+  } catch {
+    return false
+  }
+}
+
 export function profileImageUrlUpload () {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (req.body.imageUrl !== undefined) {
@@ -21,6 +66,9 @@ export function profileImageUrlUpload () {
       const loggedInUser = security.authenticatedUsers.get(req.cookies.token)
       if (loggedInUser) {
         try {
+          if (!(await isSafeImageUrl(url))) {
+            throw new Error('URL resolves to a private, internal, or unsupported address')
+          }
           const response = await fetch(url)
           if (!response.ok || !response.body) {
             throw new Error('url returned a non-OK status code or an empty body')
