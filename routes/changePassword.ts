@@ -24,6 +24,12 @@ export function changePassword () {
       return
     }
 
+    const weakPasswordError = security.getWeakPasswordError(newPasswordInString)
+    if (weakPasswordError) {
+      res.status(401).send(weakPasswordError)
+      return
+    }
+
     const token = headers.authorization ? headers.authorization.substr('Bearer='.length) : null
     if (token === null) {
       next(new Error('Blocked illegal activity by ' + connection.remoteAddress))
