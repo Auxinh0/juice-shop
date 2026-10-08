@@ -78,8 +78,7 @@ const metricToolCalls = new Counter({
   labelNames: ['tool'],
 })
 
-// vuln-code-snippet start chatbotGreedyInjectionChallenge
-function buildSystemPrompt (userName?: string) { // vuln-code-snippet neutral-line chatbotGreedyInjectionChallenge
+function buildSystemPrompt (userName?: string) {
   const userIdentifier = userName ? `\nThe customer you are currently chatting with is ${userName}.` : ''
   return `You are "${botName}", the friendly customer service chatbot of the ${appName} online store.
 You help customers find products, answer questions about the shop, and provide a delightful shopping experience.
