@@ -69,7 +69,24 @@ export const cutOffPoisonNullByte = (str: string) => {
 
 export const isAuthorized = () => expressJwt(({ secret: publicKey }) as any)
 export const denyAll = () => expressJwt({ secret: '' + Math.random() } as any)
-export const authorize = (user = {}) => jwt.sign(user, privateKey, { expiresIn: '6h', algorithm: 'RS256' })
+export const authorize = (user: any = {}) => {
+  // The JWT payload is only signed, never encrypted — anyone holding the
+  // token can base64-decode and read it. Sign a copy with the password hash
+  // and TOTP secret stripped out so a leaked/decoded token never exposes
+  // them, without touching the caller's own object (e.g. login.ts keeps the
+  // full record server-side via authenticatedUsers.put right after this).
+  let payload = user
+  if (user && typeof user === 'object' && user.data && typeof user.data === 'object') {
+    // user.data is frequently a raw Sequelize model instance (not a plain
+    // object) with the real fields nested under dataValues/_previousDataValues
+    // rather than as own properties — .get({ plain: true }) is Sequelize's
+    // own way to flatten that down to a clean plain object first.
+    const rawData = typeof user.data.get === 'function' ? user.data.get({ plain: true }) : user.data
+    const { password, totpSecret, ...safeData } = rawData
+    payload = { ...user, data: safeData }
+  }
+  return jwt.sign(payload, privateKey, { expiresIn: '6h', algorithm: 'RS256' })
+}
 export const verify = (token: string) => token ? (jws.verify as ((token: string, secret: string) => boolean))(token, publicKey) : false
 export const decode = (token: string) => { return jws.decode(token)?.payload }
 
