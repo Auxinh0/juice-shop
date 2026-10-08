@@ -39,10 +39,16 @@ function handleZipFileUpload ({ file }: Request, res: Response, next: NextFuncti
               .pipe(unzipper.Parse())
               .on('entry', function (entry: any) {
                 const fileName = entry.path
+                const uploadDir = path.resolve('uploads/complaints') + path.sep
                 const absolutePath = path.resolve('uploads/complaints/' + fileName)
-                challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return absolutePath === path.resolve('ftp/legal.md') })
-                if (absolutePath.includes(path.resolve('.'))) {
-                  entry.pipe(fs.createWriteStream('uploads/complaints/' + fileName).on('error', function (err) { next(err) }))
+                // Zip Slip: an entry path like '../../ftp/legal.md' resolves
+                // outside uploads/complaints but still "includes" the
+                // project root as a substring, so that check let a crafted
+                // zip overwrite arbitrary files anywhere under the repo.
+                // The resolved path must actually start with the intended
+                // upload directory.
+                if (absolutePath.startsWith(uploadDir)) {
+                  entry.pipe(fs.createWriteStream(absolutePath).on('error', function (err) { next(err) }))
                 } else {
                   entry.autodrain()
                 }
