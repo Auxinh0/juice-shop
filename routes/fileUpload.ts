@@ -80,7 +80,13 @@ function handleXmlUpload ({ file }: Request, res: Response, next: NextFunction) 
       try {
         const sandbox = { libxml, data }
         vm.createContext(sandbox)
-        const xmlDoc = vm.runInContext('libxml.parseXml(data, { noblanks: true, noent: true, nocdata: true })', sandbox, { timeout: 2000 })
+        // noent: false is the actual XXE fix — it stops libxml2 from
+        // substituting entities at all, which is what lets a crafted
+        // <!ENTITY xxe SYSTEM "file:///etc/passwd"> read local files (or a
+        // nested/recursive entity definition blow up into a DoS). nonet
+        // additionally blocks any entity that would resolve over the
+        // network.
+        const xmlDoc = vm.runInContext('libxml.parseXml(data, { noblanks: true, noent: false, nocdata: true, nonet: true })', sandbox, { timeout: 2000 })
         const xmlString = xmlDoc.toString(false)
         challengeUtils.solveIf(challenges.xxeFileDisclosureChallenge, () => { return (utils.matchesEtcPasswdFile(xmlString) || utils.matchesSystemIniFile(xmlString)) })
         res.status(410)
